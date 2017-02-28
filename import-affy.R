@@ -13,7 +13,6 @@ expressionmatrix[1:10,1:10]
 probename <- rownames(expressionset)
 
 
-
 library(hgu133plus2.db)
 columns(hgu133plus2.db)
 keytypes(hgu133plus2.db)
@@ -61,4 +60,7 @@ compa <- data.frame(resultat.agl,resultat.affx.sort)
 
 plot(compa$coefficient.agl,compa$coefficient.affx)
 cor(compa$coefficient.agl,compa$coefficient.affx,use='complete.obs')
+
+cor.test(compa$coefficient.agl,compa$coefficient.affx,use='complete.obs')
+
 
