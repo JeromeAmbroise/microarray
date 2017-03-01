@@ -1,10 +1,10 @@
+rm(list=ls())
 library(limma)
 library(gcrma)
 library(hgu133plus2.db)
 
-files <- list.files('AFFX/')
-files <- files[1:10]
-files <- paste0('AFFX/',files)
+files <- list.files('1-data/AFFX/')
+files <- paste0('1-data/AFFX/',files)
 
 rawfiles <- ReadAffy(filenames=files)
 expressionset <- gcrma(rawfiles)
@@ -52,10 +52,27 @@ dim(resultat.affx)
 resultat.affx <- resultat.affx[sort.list(resultat.affx$pvalue.affx),]
 adj.pvalue.affx <- p.adjust(resultat.affx$pvalue.affx,method='BH')
 resultat.affx <- data.frame(resultat.affx,adj.pvalue.affx)
-
-write.table(resultat.affx,'resultat-affx.txt',sep='\t',row.names=F)
-
 head(resultat.affx,n=10)
+
+write.table(resultat.affx,'2-result/2-fold-change-affx.txt',sep='\t',row.names=F)
+
+####### graphique
+
+
+## heatmap
+
+pdf('2-result/2a-affx-heatmap.pdf',width=8,height=8)
+expression <- expressionmatrix[1:100,]
+heatmap(expression)
+dev.off()
+
+## volcano plot
+
+pdf('2-result/2b-affx-volcano-plot.pdf',width=8,height=8)
+plot(resultat.affx$coefficient.affx,-log10(resultat.affx$pvalue.affx))
+dev.off()
+
+
 
 
 

@@ -1,28 +1,30 @@
-
+rm(list=ls())
 library(limma)
 
 
-files <- list.files('AG1/')
-files <- files[1:10]
-files <- paste0('AG1/',files)
+files <- list.files('1-data/AGL/')
+files <- paste0('1-data/AGL/',files)
 
-agl_microarray <- read.maimages(files, source="agilent", green.only=TRUE)
+agl <- read.maimages(files, source="agilent", green.only=TRUE)
 
 ######## correction du background
 
-agl_microarray_bc <- backgroundCorrect(agl_microarray,method='subtract')
+agl_BC <- backgroundCorrect(agl,method='subtract')
 
 ######### normalization between microarray
 
-agl_microarray_bc_no <- normalizeBetweenArrays(agl_microarray_bc, method="quantile")
+agl_BC_NO <- normalizeBetweenArrays(agl_BC, method="quantile")
+
+pdf('2-result/1a-agilent-normalisation.pdf',width=10,height=10)
 par(mfrow=c(2,1))
-plotDensities(agl_microarray_bc,from=0,to=16)
-plotDensities(agl_microarray_bc_no,from=0,to=16)
+plotDensities(agl_BC,from=0,to=16)
+plotDensities(agl_BC_NO,from=0,to=16)
+dev.off()
 
 mycondition <- c(rep('A',5),rep('B',5))
 mydesign <- model.matrix(~mycondition )
 
-fit <- lmFit(agl_microarray_bc_no, design=mydesign)
+fit <- lmFit(agl_BC_NO, design=mydesign)
 efit <- eBayes(fit)
 
 coefficient.agl <- fit$coefficients
@@ -36,9 +38,26 @@ annotation <- annotation[,'GeneName']
 
 resultat.agl <- data.frame(annotation,coefficient.agl,pvalue.agl)
 resultat.agl <- resultat.agl[sort.list(resultat.agl$pvalue.agl),]
-head(resultat.agl,n=20)
+adj.pvalue.agl <- p.adjust(resultat.agl$pvalue.agl,method='BH')
+resultat.agl <- data.frame(resultat.agl,adj.pvalue.agl)
+head(resultat.agl,n=10)
+
+write.table(resultat.agl,'2-result/1-fold-change-agl.txt',sep='\t',row.names=F)
 
 
-resultat.agl[resultat.agl$annotation=='RRM2',]
+####### graphique
 
+
+## heatmap
+
+pdf('2-result/1b-agilent-heatmap.pdf',width=8,height=8)
+expression <- agl_BC_NO$E[1:100,]
+heatmap(expression)
+dev.off()
+
+## volcano plot
+
+pdf('2-result/1c-agilent-heatmap.pdf',width=8,height=8)
+plot(resultat.agl$coefficient.agl,-log10(resultat.agl$pvalue.agl))
+dev.off()
 
