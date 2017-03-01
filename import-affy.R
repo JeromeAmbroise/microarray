@@ -12,7 +12,6 @@ expressionmatrix[1:10,1:10]
 
 probename <- rownames(expressionset)
 
-
 library(hgu133plus2.db)
 columns(hgu133plus2.db)
 keytypes(hgu133plus2.db)
