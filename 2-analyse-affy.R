@@ -1,5 +1,6 @@
 library(limma)
 library(gcrma)
+library(hgu133plus2.db)
 
 files <- list.files('AFFX/')
 files <- files[1:10]
@@ -8,19 +9,19 @@ files <- paste0('AFFX/',files)
 rawfiles <- ReadAffy(filenames=files)
 expressionset <- gcrma(rawfiles)
 expressionmatrix <- exprs(expressionset)
+dim(expressionmatrix)
 expressionmatrix[1:10,1:10]
-
 probename <- rownames(expressionset)
 
-library(hgu133plus2.db)
 columns(hgu133plus2.db)
 keytypes(hgu133plus2.db)
 annotation <- select(hgu133plus2.db, keys=probename, columns = c("SYMBOL"),keytype='PROBEID')
-
 head(annotation,n=10)
+dim(annotation)
 
 idx <- match(probename,annotation$PROBEID)
 annotation <- annotation[idx,]
+dim(annotation)
 
 all.equal(annotation$PROBEID,probename)
 
@@ -49,16 +50,19 @@ resultat.affx <- data.frame(na.omit(resultat.affx))
 dim(resultat.affx)
 
 resultat.affx <- resultat.affx[sort.list(resultat.affx$pvalue.affx),]
-head(resultat.affx,n=20)
-resultat.affx[resultat.affx$annotation=='RRM2',]
+adj.pvalue.affx <- p.adjust(resultat.affx$pvalue.affx,method='BH')
+resultat.affx <- data.frame(resultat.affx,adj.pvalue.affx)
 
-idx <- match(resultat.agl$annotation,resultat.affx$annotation)
+write.table(resultat.affx,'resultat-affx.txt',sep='\t',row.names=F)
 
-resultat.affx.sort <- resultat.affx[idx,]
-compa <- data.frame(resultat.agl,resultat.affx.sort)
+head(resultat.affx,n=10)
 
-plot(compa$coefficient.agl,compa$coefficient.affx)
-cor(compa$coefficient.agl,compa$coefficient.affx,use='complete.obs')
+
+
+
+
+
+
 
 
 
