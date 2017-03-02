@@ -1,0 +1,53 @@
+---
+title: '3: rapport d''analyse de la comparaison des résultats AGL et AFFYMETRIX'
+author: "Jerome Ambroise"
+date: "2 mars 2017"
+output: 
+  pdf_document: 
+    fig_height: 7
+    fig_width: 8
+---
+
+#1: Importation des données
+
+```{r}
+resultat.agl <- read.table('2-result/1-fold-change-agl.txt',sep='\t',header=T)
+resultat.affx <- read.table('2-result/2-fold-change-affx.txt',sep='\t',header=T)
+
+head(resultat.agl)
+head(resultat.affx)
+
+```
+
+On constate que les résultats n'apparaissent pas dans le même ordre.
+
+
+#2: Alignement des tableaux de résultats
+
+```{r}
+idx <- match(resultat.agl$annotation,resultat.affx$annotation)
+resultat.affx <- resultat.affx[idx,]
+
+head(resultat.agl)
+head(resultat.affx)
+
+```
+
+On peut désormais créer un tableau avec les résultats des 2 plateformes.
+
+```{r}
+comparison <- data.frame(resultat.agl,resultat.affx)
+
+```
+
+A partir de ce tableau, on crée facilement des graphiques de comparaison des log2 fold-changes et on calcule facilement des coefficients de corrélations entre les résultats des 2 plateformes (Affymetrix versus Agilent)
+
+
+```{r}
+plot(comparison$coefficient.agl,comparison$coefficient.affx)
+cor(comparison$coefficient.agl,comparison$coefficient.affx,use='complete.obs')
+cor(comparison$coefficient.agl,comparison$coefficient.affx,use='complete.obs',method='spearman')
+
+```
+
+

@@ -1,0 +1,180 @@
+---
+title: "1: Rapport d'analyse des données Agilent"
+author: "Jerome Ambroise"
+date: "2 mars 2017"
+output: 
+  pdf_document: 
+    fig_height: 7
+    fig_width: 8
+---
+
+Dans le document, ci dessous, nous allons analyser des données microarray générées avec une plateforme Agilent.
+
+Les données proviennent de l'étude "MicroArray Quality Control (MAQC) project" dont un des papier vous est fourni.
+Dans ce document, nous analysons 5 échantillons A (A1, A2, A3, A4 et A5) et 5 échantillons B (B1, B2, B3, B4 et B5) et l'objectif est d'identifier les gènes qui sont modulés.
+
+# 1: Chargement des packages et importation des données.
+
+Nous commençons par charger le package Limma. Limma est un package bioconductor qui dispose d'un "user guide" très complet
+
+```{r}
+rm(list=ls())
+library(limma)
+```
+
+Nous importons les données qui sont situées dans le répertoire 1-data/AGL. Il s'agit de 10 fichiers '.txt'.
+
+```{r}
+files <- list.files('1-data/AGL/')
+files <- paste0('1-data/AGL/',files)
+agl <- read.maimages(files, source="agilent", green.only=TRUE)
+
+```
+
+\newpage
+
+# 2: Pré-traitement des données.
+
+
+Les données de microarray sont généralement pré-traitées en 3 étapes:
+
+1: la correction du background
+
+2: la normalisation
+
+3: la transformation (généralement log2)
+
+Nous commençons par effecture la correction du background
+
+```{r}
+agl_BC <- backgroundCorrect(agl,method='subtract')
+```
+
+Ensuite, nous normalisons les données. Durant cette normalisation, vous pouvez constater que R applique également une transformation logarithmique (log2)
+
+```{r}
+agl_BC_NO <- normalizeBetweenArrays(agl_BC, method="quantile")
+
+```
+
+Nous pouvons afficher l'effet de la normalisation dans des graphiques de densité.
+
+```{r}
+par(mfrow=c(2,1))
+plotDensities(agl_BC,from=0,to=16)
+plotDensities(agl_BC_NO,from=0,to=16)
+
+```
+
+Nous pouvons également créer un fichier pdf avec ces graphiques.
+
+```{r}
+pdf('2-result/1a-agilent-normalisation.pdf',width=10,height=10)
+par(mfrow=c(2,1))
+plotDensities(agl_BC,from=0,to=16)
+plotDensities(agl_BC_NO,from=0,to=16)
+dev.off()
+```
+
+\newpage
+
+# 3: Création des modèles statistiques pour détecter les gènes modulés
+
+Pour rappel, le but est de comparer les niveaux d'expression de chacun des gènes entre les 5 échantillons 'A' et les 5 échantillons 'B'. Nous commencçons par spécifier à R le design de notre expérience
+
+```{r}
+mycondition <- c(rep('A',5),rep('B',5))
+mydesign <- model.matrix(~mycondition )
+print(mydesign)
+```
+
+Une fois que le modèle est spécifié, il est possible de créer les modèles pour chacun des gènes et de calculer les statistiques de test et les p-valeurs associées à chacun des gènes. Cela se fait en deux étapes avec les fonctions 'lmFit' et 'eBayes' du package 'limma'. 
+
+```{r}
+fit <- lmFit(agl_BC_NO, design=mydesign)
+efit <- eBayes(fit)
+```
+
+Une fois les modèles construits, on peut aller chercher les informations qui nous intéressent et les regrouper dans une data.frame. 
+Il s'agit de 3 éléments
+
+1: Le coefficient d'intérêt du modèle construit pour chacun des gènes. Ce coefficient correspond à la différence moyenne entre le niveau d'expression des échantillons A et B, dans l'échelle log2. Il s'agit donc d'un 'log2 fold-change'.
+
+2: la p-valeur d'intérêt du modèle construit pour chacun des gènes.
+
+3: l'annotation (çad le nom) de chacun des gènes
+
+```{r}
+coefficient.agl <- fit$coefficients
+head(coefficient.agl)
+coefficient.agl <- coefficient.agl[,2]
+pvalue.agl <- efit$p.value
+head(pvalue.agl)
+pvalue.agl <- pvalue.agl[,2]
+annotation <- efit$genes
+annotation <- annotation[,'GeneName']
+resultat.agl <- data.frame(annotation,coefficient.agl,pvalue.agl)
+head(resultat.agl,n=10)
+```
+
+\newpage
+
+# 4: Classement des résultats et ajustement des p-valeurs
+
+Nous allons maintenant classer les gènes selon les p-valeurs. Nous allons également calculer les p-valeurs ajustées selon la méthode de 'Benjamini-Hochberg'.
+
+```{r}
+resultat.agl <- resultat.agl[sort.list(resultat.agl$pvalue.agl),]
+adj.pvalue.agl <- p.adjust(resultat.agl$pvalue.agl,method='BH')
+resultat.agl <- data.frame(resultat.agl,adj.pvalue.agl)
+head(resultat.agl)
+```
+
+Finalement, nous écrivons tous les résutlats dans un fichier '.txt' dans le répertoire '2-result'.
+
+```{r}
+write.table(resultat.agl,'2-result/1-fold-change-agl.txt',sep='\t',row.names=F)
+
+```
+
+\newpage
+
+# 4: Quelques graphiques
+
+
+Nous allons représenter une heatmap des 100 premiers gènes (choix arbitraire des gènes).
+
+```{r}
+expression <- agl_BC_NO$E[1:100,]
+heatmap(expression)
+
+```
+
+Nous pouvons afficher ce graphique dans une fichier pdf.
+
+```{r}
+pdf('2-result/1b-agilent-heatmap.pdf',width=8,height=8)
+expression <- agl_BC_NO$E[1:100,]
+heatmap(expression)
+dev.off()
+```
+
+
+\newpage
+
+Nous allons représenter un volcano-plot.
+
+
+```{r}
+plot(resultat.agl$coefficient.agl,-log10(resultat.agl$pvalue.agl))
+
+```
+Nous pouvons afficher ce graphique dans une fichier pdf.
+
+
+```{r}
+pdf('2-result/1c-agilent-heatmap.pdf',width=8,height=8)
+plot(resultat.agl$coefficient.agl,-log10(resultat.agl$pvalue.agl))
+dev.off()
+
+```

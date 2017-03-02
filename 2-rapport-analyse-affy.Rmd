@@ -1,0 +1,231 @@
+---
+title: "2: Rapport d'analyse des données Affimetrix"
+author: "Jerome Ambroise"
+date: "2 mars 2017"
+output: 
+  pdf_document: 
+    fig_height: 7
+    fig_width: 8
+---
+
+Dans le document, ci dessous, nous allons analyser des données microarray générées avec une plateforme Agilent.
+
+Les données proviennent de l'étude "MicroArray Quality Control (MAQC) project" dont un des papier vous est fourni.
+Dans ce document, nous analysons 5 échantillons A (A1, A2, A3, A4 et A5) et 5 échantillons B (B1, B2, B3, B4 et B5) et l'objectif est d'identifier les gènes qui sont modulés.
+
+# 1: Chargement des packages et importation des données.
+
+Nous commençons par charger le package Limma. Limma est un package bioconductor qui dispose d'un "user guide" très complet.
+
+Le package 'gcrma' sera utilisé pour le prétraitement des données.
+
+Le package 'hgu133plus2.db' sera utilisé pour annoter les sondes (ou "probes").
+
+
+```{r}
+rm(list=ls())
+library(limma)
+library(gcrma)
+library(hgu133plus2.db)
+```
+
+Nous importons les données qui sont situées dans le répertoire 1-data/AGL. Il s'agit de 10 fichiers '.CEL'.
+
+```{r}
+files <- list.files('1-data/AFFX/')
+files <- paste0('1-data/AFFX/',files)
+rawfiles <- ReadAffy(filenames=files)
+
+```
+
+\newpage
+
+# 2: Pré-traitement des données.
+
+
+Les données de microarray sont généralement pré-traitées en 3 étapes:
+
+1: la correction du background
+
+2: la normalisation
+
+3: la transformation (généralement log2)
+
+Avec les données de affymetrix, ces trois étapes sont généralement réalisée avec une seule fonction.
+GCRMA est une méthode standard pour réaliser ces trois étapes.
+
+```{r}
+expressionset <- gcrma(rawfiles)
+print(expressionset)
+```
+
+L'expressionset contient de nombreux "slots" dont la matrice d'expression.
+Il est intéressant de noter que pour le moment le 'slot' featureData est vide. Il s'agit du slot dans lequel doit être stocké la significaiton de chacune des sondes.
+Il est possible d'extraire cette matrice d'expression avec la fonction 'exprs'.
+
+```{r}
+expressionmatrix <- exprs(expressionset)
+dim(expressionmatrix)
+expressionmatrix[1:10,1:10]
+```
+
+Nous allons determiner l'annotation de chacune des sondes à partir du package 'hgu133plus2.db'
+
+
+
+```{r}
+probename <- rownames(expressionset)
+
+columns(hgu133plus2.db)
+keytypes(hgu133plus2.db)
+annotation <- select(hgu133plus2.db,keytype='PROBEID', keys=probename, columns = c("SYMBOL"))
+head(annotation,n=10)
+dim(annotation)
+```
+
+
+
+```{r}
+idx <- match(probename,annotation$PROBEID)
+annotation <- annotation[idx,]
+dim(annotation)
+
+all.equal(annotation$PROBEID,probename)
+
+fData(expressionset) 
+fData(expressionset) <- annotation
+
+```
+
+
+
+
+\newpage
+
+# 3: Création des modèles statistiques pour détecter les gènes modulés
+
+Pour rappel, le but est de comparer les niveaux d'expression de chacun des gènes entre les 5 échantillons 'A' et les 5 échantillons 'B'. Nous commencçons par spécifier à R le design de notre expérience
+
+```{r}
+mycondition <- c(rep('A',5),rep('B',5))
+mydesign <- model.matrix(~mycondition )
+print(mydesign)
+```
+
+Une fois que le modèle est spécifié, il est possible de créer les modèles pour chacun des gènes et de calculer les statistiques de test et les p-valeurs associées à chacun des gestes. Cela se fait en deux étapes avec les fonctions 'lmFit' et 'eBayes' du package 'limma'. 
+
+```{r}
+fit <- lmFit(expressionset, design=mydesign)
+efit <- eBayes(fit)
+```
+
+Une fois les modèles construits, on peut aller chercher les informations qui nous intéressent et les regrouper dans une data.frame. 
+Il s'agit de 3 éléments
+
+1: Le coefficient d'intérêt du modèle construit pour chacun des gènes. Ce coefficient correspond à la différence moyenne entre le niveau d'expression des échantillons A et B, dans l'échelle log2. Il s'agit donc d'un 'log2 fold-change'.
+
+2: la p-valeur d'intérêt du modèle construit pour chacun des gènes.
+
+3: l'annotation (çad le nom) de chacun des gènes
+
+```{r}
+
+coefficient.affx <- fit$coefficients
+head(coefficient.affx)
+coefficient.affx <- coefficient.affx[,2]
+pvalue.affx <- efit$p.value
+head(pvalue.affx)
+pvalue.affx <- pvalue.affx[,2]
+annotation <- efit$genes
+annotation <- annotation[,'SYMBOL']
+
+```
+
+
+```{r}
+sum(is.na(annotation))
+```
+
+Nous allons supprimer les sondes qui ne sont pas annotées. Elles sont positionnées dans une localisation du génome qui n'est pas codante (çad en dehors d'un gène). 
+
+```{r}
+resultat.affx <- data.frame(annotation,coefficient.affx,pvalue.affx)
+dim(resultat.affx)
+resultat.affx <- data.frame(na.omit(resultat.affx))
+dim(resultat.affx)
+
+```
+
+
+
+\newpage
+
+# 4: Classement des résultats et ajustement des p-valeurs
+
+Nous allons maintenant classer les gènes selon les p-valeurs. Nous allons également calculer les p-valeurs ajustées selon la méthode de 'Benjamini-Hochberg'.
+
+```{r}
+resultat.affx <- resultat.affx[sort.list(resultat.affx$pvalue.affx),]
+adj.pvalue.affx <- p.adjust(resultat.affx$pvalue.affx,method='BH')
+resultat.affx <- data.frame(resultat.affx,adj.pvalue.affx)
+head(resultat.affx,n=10)
+
+```
+
+Finalement, nous écrivons tous les résutlats dans un fichier '.txt' dans le répertoire '2-result'.
+
+```{r}
+write.table(resultat.affx,'2-result/1-fold-change-affx.txt',sep='\t',row.names=F)
+
+```
+
+\newpage
+
+# 4: Quelques graphiques
+
+
+Nous allons représenter une heatmap des 100 premiers gènes (choix arbitraire des gènes).
+
+```{r}
+expression <- expressionmatrix[1:100,]
+heatmap(expression)
+
+```
+
+Nous pouvons afficher ce graphique dans une fichier pdf.
+
+```{r}
+pdf('2-result/2a-affx-heatmap.pdf',width=8,height=8)
+expression <- expressionmatrix[1:100,]
+heatmap(expression)
+dev.off()
+```
+
+
+\newpage
+
+Nous allons représenter un volcano-plot.
+
+
+```{r}
+plot(resultat.affx$coefficient.affx,-log10(resultat.affx$pvalue.affx))
+
+```
+Nous pouvons afficher ce graphique dans une fichier pdf.
+
+
+```{r}
+pdf('2-result/2b-affx-volcano-plot.pdf',width=8,height=8)
+plot(resultat.affx$coefficient.affx,-log10(resultat.affx$pvalue.affx))
+dev.off()
+
+```
+
+
+
+
+
+
+
+
+
